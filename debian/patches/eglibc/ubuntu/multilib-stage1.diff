@@ -1,0 +1,71 @@
+--- glibc-2.19/debian/rules.d/debhelper.mk.orig	2014-10-22 21:10:46.131349002 +0200
++++ glibc-2.19/debian/rules.d/debhelper.mk	2014-10-22 21:20:07.863363493 +0200
+@@ -201,19 +201,30 @@
+ 	templates="libc-dev" ;\
+ 	pass="" ; \
+ 	suffix="" ;\
++	case "$$curpass:$$slibdir" in \
++	  libc:*) \
++	    ;; \
++	  *:/lib32 | *:/lib64 | *:/libx32 | *:/lib/arm-linux-gnueabi*) \
++	    pass="-alt" \
++	    suffix="-$(curpass)" \
++	    ;; \
++	esac ; \
+ 	for t in $$templates ; do \
+ 	  for s in debian/$$t$$pass.* ; do \
+ 	    t=`echo $$s | sed -e "s#libc\(.*\)$$pass#$(libc)\1$$suffix#"` ; \
++	    echo "Generating $$t ..."; \
+ 	    if [ "$$s" != "$$t" ] ; then \
+ 	      cp $$s $$t ; \
+ 	    fi ; \
+-	    sed -e "s#TMPDIR#debian/tmp-$$curpass#g" -i $$t; \
+-	    sed -e "s#RTLDDIR#$$rtlddir#g" -i $$t; \
+-	    sed -e "s#SLIBDIR#$$slibdir#g" -i $$t; \
++	    sed -i \
++		-e "/LIBDIR.*.a /d" \
++		-e "s#TMPDIR#debian/tmp-$$curpass#g" \
++		-e "s#RTLDDIR#$$rtlddir#g" \
++		-e "s#SLIBDIR#$$slibdir#g" \
++		-e "s#LIBDIR#$$libdir#g" \
++	      $$t; \
+ 	  done ; \
+ 	done
+-
+-	sed -e "/LIBDIR.*.a /d" -e "s#LIBDIR#lib#g" -i debian/$(libc)-dev.install
+ else
+ $(patsubst %,debhelper_%,$(GLIBC_PASSES)) :: debhelper_% : $(stamp)debhelper_%
+ $(stamp)debhelper_%: $(stamp)debhelper-common $(stamp)install_%
+--- glibc-2.19/debian/rules.d/build.mk.orig	2014-10-23 15:14:45.302186092 +0200
++++ glibc-2.19/debian/rules.d/build.mk	2014-10-23 15:15:37.194572346 +0200
+@@ -165,10 +165,10 @@
+ 	    cross-compiling=yes install_root=$(CURDIR)/debian/tmp-$(curpass)	\
+ 	    install-bootstrap-headers=yes install-headers )
+ 
+-	install -d $(CURDIR)/debian/tmp-$(curpass)/lib
+-	install -m 644 $(DEB_BUILDDIR)/csu/crt[1in].o $(CURDIR)/debian/tmp-$(curpass)/lib
+-	${CC} -nostdlib -nostartfiles -shared -x c /dev/null \
+-	        -o $(CURDIR)/debian/tmp-$(curpass)/lib/libc.so
++	install -d $(CURDIR)/debian/tmp-$(curpass)/$(call xx,libdir)
++	install -m 644 $(DEB_BUILDDIR)/csu/crt[1in].o $(CURDIR)/debian/tmp-$(curpass)/$(call xx,libdir)/.
++	$(call xx,CC) -nostdlib -nostartfiles -shared -x c /dev/null \
++	        -o $(CURDIR)/debian/tmp-$(curpass)/$(call xx,libdir)/libc.so
+ else
+ 	: # FIXME: why just needed for ARM multilib?
+ 	case "$(curpass)" in \
+@@ -209,6 +209,7 @@
+ 	  $(MAKE) -f debian/generate-supported.mk IN=localedata/SUPPORTED \
+ 	    OUT=debian/tmp-$(curpass)/usr/share/i18n/SUPPORTED; \
+ 	fi
++endif
+ 
+ 	# Create the multiarch directories, and the configuration file in /etc/ld.so.conf.d
+ 	if [ $(curpass) = libc ]; then \
+@@ -230,6 +231,7 @@
+ 	  mv debian/tmp-$(curpass)/usr/include/ieee754.h debian/tmp-$(curpass)/usr/include/$(DEB_HOST_MULTIARCH); \
+ 	fi
+ 
++ifeq ($(filter stage1,$(DEB_BUILD_PROFILES)),)
+ 	# For our biarch libc, add an ld.so.conf.d configuration; this
+ 	# is needed because multiarch libc Replaces: libc6-i386 for ld.so, and
+ 	# the multiarch ld.so doesn't look at the (non-standard) /lib32, so we

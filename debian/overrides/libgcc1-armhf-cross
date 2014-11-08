@@ -1,0 +1,4 @@
+libgcc1-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libgcc_s.so.1
+libgcc1-armhf-cross: non-standard-dir-in-usr usr/arm-linux-gnueabihf/
+libgcc1-armhf-cross: shared-lib-without-dependency-information usr/arm-linux-gnueabihf/lib/libgcc_s.so.1
+libgcc1-armhf-cross: shlibs-declares-dependency-on-other-package libgcc1

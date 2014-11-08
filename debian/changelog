@@ -1,0 +1,88 @@
+powerpc-cross-toolchain-base (1.2) utopic; urgency=medium
+
+  [ Matthias Klose ]
+  * Build using the glibc source package.
+  * Update the multilib build for glibc.
+
+  [ Adam Conrad ]
+  * Sync with arm64 packaging.
+  * install-stubs.patch: Install glibc stub headers for the stage1 build.
+
+ -- Matthias Klose <doko@ubuntu.com>  Thu, 23 Oct 2014 16:06:25 +0200
+
+powerpc-cross-toolchain-base (1.1) trusty; urgency=medium
+
+  * Bump eglibc to 2.19.
+  * Refresh eglibc patches.
+  * Add rsync, xmlto build-dep.
+  * Build-depend on libcloog-isl-dev instead of libcloog-ppl-dev.
+  * Regenerate debian/control.
+
+ -- Matthias Klose <doko@ubuntu.com>  Wed, 26 Feb 2014 08:08:24 +0100
+
+powerpc-cross-toolchain-base (1.0) trusty; urgency=low
+
+  * Bump eglibc to 2.18.
+  * Bump gcc to 4.8.
+  * Explicitly use /dev/null as quilt config file.
+  * Drop not-needed any more binutils-version.diff gcc overlay patch
+  * Remove binutils-gold build-conflict, and regenerate control.
+  * Refresh eglibc/ubuntu/disable-selinux.patch.
+  * Add symlinks and rdfind build-dependency.
+  * Speed up build, by building eglibc in parallel.
+  * Remove Marcin Juszkiewicz from maintainers, thanks a lot for your
+    awesome work and good luck on the Red side ;-)
+  * Bump linux-source to 3.12.
+
+ -- Dimitri John Ledkov <xnox@ubuntu.com>  Fri, 20 Dec 2013 01:12:44 +0000
+
+powerpc-cross-toolchain-base (0.9) raring; urgency=low
+
+  * Drop gcc-4.7/no-shlibdeps-for-stages.diff, not needed with new glibc.
+
+ -- Adam Conrad <adconrad@ubuntu.com>  Fri, 08 Feb 2013 14:15:01 -0700
+
+powerpc-cross-toolchain-base (0.8) raring; urgency=low
+
+  * Bump eglibc to 2.17.
+
+ -- Colin Watson <cjwatson@ubuntu.com>  Fri, 08 Feb 2013 20:41:54 +0000
+
+powerpc-cross-toolchain-base (0.7) raring; urgency=low
+
+  * Don't call dh_shlibdeps for the libgcc packages; the packages are
+    just unpacked for the following glibc build, the dependency information
+    is not needed. The build fails otherwise on i386 (succeeds on amd64).
+
+ -- Matthias Klose <doko@ubuntu.com>  Sat, 12 Jan 2013 20:24:27 +0100
+
+powerpc-cross-toolchain-base (0.6) raring; urgency=low
+
+  * Remove LD_LIBRARY_PATH settings for gcc builds.
+
+ -- Matthias Klose <doko@ubuntu.com>  Sat, 12 Jan 2013 03:41:26 +0100
+
+powerpc-cross-toolchain-base (0.5) raring; urgency=low
+
+  * Set WITH_SYSROOT for GCC builds.
+
+ -- Matthias Klose <doko@ubuntu.com>  Sat, 12 Jan 2013 02:18:49 +0100
+
+powerpc-cross-toolchain-base (0.4) raring; urgency=low
+
+  * Bump b-d on linux source to 3.8.
+
+ -- Matthias Klose <doko@ubuntu.com>  Fri, 11 Jan 2013 22:02:08 +0100
+
+powerpc-cross-toolchain-base (0.2) raring; urgency=low
+
+  * Merge packaging with armhf-cross-toolchain-base 1.94.
+
+ -- Matthias Klose <doko@ubuntu.com>  Fri, 11 Jan 2013 14:59:10 +0100
+
+powerpc-cross-toolchain-base (0.1) raring; urgency=low
+
+  * Initial package, based on armhf-cross-toolchain-base 1.93.
+  * Don't try to build libc6-prof packages.
+
+ -- Matthias Klose <doko@ubuntu.com>  Fri, 14 Dec 2012 10:11:41 +0100

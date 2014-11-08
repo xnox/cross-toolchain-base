@@ -1,0 +1,176 @@
+From 00cd7debc55a63e23fe0f4f7967525bee8995e17 Mon Sep 17 00:00:00 2001
+From: Marcin Juszkiewicz <marcin@juszkiewicz.com.pl>
+Date: Thu, 3 Feb 2011 15:45:05 +0100
+Subject: [PATCH 2/2] 51
+
+---
+ debian/rules                |   28 ++++++++++++++++++++--------
+ debian/rules.d/build.mk     |   24 ++++++++++++++++++++++++
+ debian/rules.d/debhelper.mk |   27 ++++++++++++++++++++++++++-
+ 3 files changed, 70 insertions(+), 9 deletions(-)
+
+Index: eglibc-2.13/debian/rules
+===================================================================
+--- eglibc-2.13.orig/debian/rules	2012-02-26 17:50:24.000000000 +0000
++++ eglibc-2.13/debian/rules	2012-04-03 11:02:34.084757860 +0000
+@@ -128,9 +128,15 @@
+ # Which build pass are we on?
+ curpass = $(filter-out %_,$(subst _,_ ,$@))
+ 
+-DEB_ARCH_REGULAR_PACKAGES = $(libc) $(libc)-dev $(libc)-dbg $(libc)-prof $(libc)-pic libc-bin libc-dev-bin multiarch-support
+-DEB_INDEP_REGULAR_PACKAGES = glibc-doc eglibc-source locales
+-DEB_UDEB_PACKAGES = $(libc)-udeb libnss-dns-udeb libnss-files-udeb
++ifeq ($(DEB_STAGE),stage1)
++  DEB_ARCH_REGULAR_PACKAGES = $(libc)-dev
++  DEB_INDEP_REGULAR_PACKAGES =
++  DEB_UDEB_PACKAGES =
++else
++  DEB_ARCH_REGULAR_PACKAGES = $(libc) $(libc)-dev $(libc)-dbg $(libc)-prof $(libc)-pic libc-bin libc-dev-bin multiarch-support
++  DEB_INDEP_REGULAR_PACKAGES = glibc-doc eglibc-source locales
++  DEB_UDEB_PACKAGES = $(libc)-udeb libnss-dns-udeb libnss-files-udeb
++endif
+ 
+ ## Locales can only be pre-generated during native compiles
+ ifeq ($(DEB_HOST_ARCH),$(DEB_BUILD_ARCH))
+@@ -169,8 +175,10 @@
+ NODEBUG_libc6-mips64 = 1
+ NODEBUG_nscd = 1
+ 
+-ifeq ($(threads),yes)
+-DEB_ARCH_REGULAR_PACKAGES += nscd
++ifneq ($(DEB_STAGE),stage1)
++  ifeq ($(threads),yes)
++  DEB_ARCH_REGULAR_PACKAGES += nscd
++  endif
+ endif
+ 
+ # And now the rules...
+@@ -186,14 +194,18 @@
+ 	rm -rf debian/include
+ 
+ # Required Debian targets
++ifdef DEB_STAGE
++build-arch: $(stamp)info \
++	$(patsubst %,$(stamp)build_%,$(EGLIBC_PASSES))
++build: build-arch
++else
+ build-arch: $(stamp)info \
+ 	$(patsubst %,$(stamp)build_%,$(EGLIBC_PASSES)) \
+ 	$(patsubst %,$(stamp)check_%,$(EGLIBC_PASSES))
+-
+-build-indep: $(stamp)source $(stamp)doc
+-
+ build: build-arch build-indep
++endif
+ 
++build-indep: $(stamp)source $(stamp)doc
+ 
+ binary-indep: build-indep testroot debian/control $(build-tree) \
+ 	$(patsubst %,$(stamp)binaryinst_%,$(DEB_INDEP_REGULAR_PACKAGES))
+Index: eglibc-2.13/debian/rules.d/build.mk
+===================================================================
+--- eglibc-2.13.orig/debian/rules.d/build.mk	2011-12-07 00:15:54.000000000 +0000
++++ eglibc-2.13/debian/rules.d/build.mk	2012-04-03 11:02:34.084757860 +0000
+@@ -11,6 +11,13 @@
+ (exec 3>&1; exit `( ( ( $(2) ) 2>&1 3>&-; echo $$? >&4) | tee $(1) >&3) 4>&1`)
+ endef
+ 
++ifeq ($(DEB_STAGE),stage1)
++    libc_extra_config_options = $(extra_config_options) --disable-sanity-checks \
++				--enable-hacker-mode
++endif
++ifdef WITH_SYSROOT
++    libc_extra_config_options += --with-headers=$(WITH_SYSROOT)/$(includedir)
++endif
+ 
+ $(patsubst %,mkbuilddir_%,$(EGLIBC_PASSES)) :: mkbuilddir_% : $(stamp)mkbuilddir_%
+ $(stamp)mkbuilddir_%: $(stamp)patch $(KERNEL_HEADER_DIR)
+@@ -83,6 +90,10 @@
+ $(patsubst %,build_%,$(EGLIBC_PASSES)) :: build_% : $(stamp)build_%
+ $(stamp)build_%: $(stamp)configure_%
+ 	@echo Building $(curpass)
++
++ifeq ($(DEB_STAGE),stage1)
++	$(MAKE) cross-compiling=yes -C $(DEB_BUILDDIR) $(NJOBS) csu/subdir_lib
++else
+ 	$(call logme, -a $(log_build), $(MAKE) -C $(DEB_BUILDDIR) $(NJOBS))
+ 	$(call logme, -a $(log_build), echo "---------------" ; echo -n "Build ended: " ; date --rfc-2822)
+ 	if [ $(curpass) = libc ]; then \
+@@ -105,6 +116,7 @@
+ 	    done ; \
+ 	  done ; \
+ 	fi
++endif
+ 	touch $@
+ 
+ $(patsubst %,check_%,$(EGLIBC_PASSES)) :: check_% : $(stamp)check_%
+@@ -143,6 +155,17 @@
+ $(stamp)install_%: $(stamp)check_%
+ 	@echo Installing $(curpass)
+ 	rm -rf $(CURDIR)/debian/tmp-$(curpass)
++
++ifeq ($(DEB_STAGE),stage1)
++	$(call logme, -a $(log_build), $(MAKE) -C $(DEB_BUILDDIR) $(NJOBS) \
++	    cross-compiling=yes install_root=$(CURDIR)/debian/tmp-$(curpass) \
++	    install-bootstrap-headers=yes install-headers )
++
++	install -d $(CURDIR)/debian/tmp-$(curpass)/lib
++	install -m 644 $(DEB_BUILDDIR)/csu/crt[1in].o $(CURDIR)/debian/tmp-$(curpass)/lib
++	${CC} -nostdlib -nostartfiles -shared -x c /dev/null \
++	        -o $(CURDIR)/debian/tmp-$(curpass)/lib/libc.so
++else
+ 	$(MAKE) -C $(DEB_BUILDDIR) \
+ 	  install_root=$(CURDIR)/debian/tmp-$(curpass) install
+ 
+@@ -221,6 +244,7 @@
+ 	fi
+ 	
+ 	$(call xx,extra_install)
++endif
+ 	touch $@
+ 
+ $(stamp)doc: $(stamp)patch
+Index: eglibc-2.13/debian/rules.d/debhelper.mk
+===================================================================
+--- eglibc-2.13.orig/debian/rules.d/debhelper.mk	2011-12-24 17:23:22.000000000 +0000
++++ eglibc-2.13/debian/rules.d/debhelper.mk	2012-04-03 11:02:46.792757857 +0000
+@@ -186,6 +186,31 @@
+ 
+ 	touch $@
+ 
++ifeq ($(DEB_STAGE),stage1)
++
++$(patsubst %,debhelper_%,$(EGLIBC_PASSES)) :: debhelper_% : $(stamp)debhelper_%
++$(stamp)debhelper_%: $(stamp)debhelper-common $(stamp)install_%
++	libdir=$(call xx,libdir) ; \
++	slibdir=$(call xx,slibdir) ; \
++	curpass=$(curpass) ; \
++	templates="libc-dev" ;\
++	pass="" ; \
++	suffix="" ;\
++	for t in $$templates ; do \
++	  for s in debian/$$t$$pass.* ; do \
++	    t=`echo $$s | sed -e "s#libc\(.*\)$$pass#$(libc)\1$$suffix#"` ; \
++	    if [ "$$s" != "$$t" ] ; then \
++	      cp $$s $$t ; \
++	    fi ; \
++	    sed -e "s#TMPDIR#debian/tmp-$$curpass#g" -i $$t; \
++	    sed -e "s#SLIBDIR#$$slibdir#g" -i $$t; \
++	  done ; \
++	done
++
++	egrep -v "LIBDIR.*.a " debian/libc6-dev.install >debian/libc6-dev.install-
++	mv debian/libc6-dev.install- debian/libc6-dev.install
++	sed -e "s#LIBDIR#${slibdir}#g" -i debian/libc6-dev.install
++else
+ $(patsubst %,debhelper_%,$(EGLIBC_PASSES)) :: debhelper_% : $(stamp)debhelper_%
+ $(stamp)debhelper_%: $(stamp)debhelper-common $(stamp)install_%
+ 	libdir=$(call xx,libdir) ; \
+@@ -225,6 +250,7 @@
+ 	  done ; \
+ 	done
+ 
++endif
+ 	touch $@
+ 
+ clean::

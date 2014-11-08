@@ -1,0 +1,24 @@
+---
+ debian/rules.d/debhelper.mk |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: eglibc-2.13/debian/rules.d/debhelper.mk
+===================================================================
+--- eglibc-2.13.orig/debian/rules.d/debhelper.mk	2012-04-03 11:02:34.084757860 +0000
++++ eglibc-2.13/debian/rules.d/debhelper.mk	2012-04-03 11:02:46.212757857 +0000
+@@ -203,13 +203,14 @@
+ 	      cp $$s $$t ; \
+ 	    fi ; \
+ 	    sed -e "s#TMPDIR#debian/tmp-$$curpass#g" -i $$t; \
++ 	    sed -e "s#RTLDDIR#$$rtlddir#g" -i $$t; \
+ 	    sed -e "s#SLIBDIR#$$slibdir#g" -i $$t; \
++	    sed -e "s#LIBDIR#$$libdir#g" -i $$t; \
+ 	  done ; \
+ 	done
+ 
+ 	egrep -v "LIBDIR.*.a " debian/libc6-dev.install >debian/libc6-dev.install-
+ 	mv debian/libc6-dev.install- debian/libc6-dev.install
+-	sed -e "s#LIBDIR#${slibdir}#g" -i debian/libc6-dev.install
+ else
+ $(patsubst %,debhelper_%,$(EGLIBC_PASSES)) :: debhelper_% : $(stamp)debhelper_%
+ $(stamp)debhelper_%: $(stamp)debhelper-common $(stamp)install_%

@@ -1,0 +1,2 @@
+libgcc1-dbg-armhf-cross: arch-independent-package-contains-binary-or-object usr/lib/debug/usr/arm-linux-gnueabihf/lib/libgcc_s.so.1
+libgcc1-dbg-armhf-cross: debug-package-should-be-named-dbg usr/lib/debug/usr/

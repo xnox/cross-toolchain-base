@@ -1,0 +1,29 @@
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/ld-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libanl-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libBrokenLocale-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libc-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libcidn-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libcrypt-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libdl-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libm-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libmemusage.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnsl-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnss_compat-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnss_dns-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnss_files-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnss_hesiod-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnss_nis-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libnss_nisplus-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libpcprofile.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libpthread-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libresolv-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/librt-2.13.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libSegFault.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libthread_db-1.0.so
+libc6-armhf-cross: arch-independent-package-contains-binary-or-object usr/arm-linux-gnueabihf/lib/libutil-2.13.so
+libc6-armhf-cross: embedded-library usr/arm-linux-gnueabihf/lib/libm-2.13.so: libm
+libc6-armhf-cross: non-standard-dir-in-usr usr/arm-linux-gnueabihf/
+libc6-armhf-cross: shared-lib-without-dependency-information usr/arm-linux-gnueabihf/lib/ld-2.13.so
+libc6-armhf-cross: shlibs-declares-dependency-on-other-package libc6 (>= 2.13)
+libc6-armhf-cross: shlib-with-executable-bit usr/arm-linux-gnueabihf/lib/ld-2.13.so 0755
+libc6-armhf-cross: unstripped-binary-or-object usr/arm-linux-gnueabihf/lib/libpthread-2.13.so

@@ -1,0 +1,13 @@
+Index: eglibc-2.19/debian/rules.d/build.mk
+===================================================================
+--- eglibc-2.19.orig/debian/rules.d/build.mk	2014-02-25 16:08:38.981100812 +0000
++++ eglibc-2.19/debian/rules.d/build.mk	2014-02-25 16:08:38.977100846 +0000
+@@ -56,6 +56,8 @@
+ 	echo "libdir = $(call xx,libdir)"         >> $(DEB_BUILDDIR)/configparms
+ 	echo "slibdir = $(call xx,slibdir)"       >> $(DEB_BUILDDIR)/configparms
+ 	echo "rtlddir = $(call xx,rtlddir)"       >> $(DEB_BUILDDIR)/configparms
++	echo "have-ssp = no"                      >> $(DEB_BUILDDIR)/configparms
++	echo "config-extra-cflags = -fno-stack-protector"   >> $(DEB_BUILDDIR)/configparms
+ 
+ 	# Define the installation directory for all calls to make. This avoid
+ 	# broken glibc makefiles to spuriously trigger install rules trying to

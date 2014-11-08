@@ -1,0 +1,38 @@
+>From f78d8e220d6daf53188e89c3aefa73640498fd55 Mon Sep 17 00:00:00 2001
+From: Marcin Juszkiewicz <marcin@juszkiewicz.com.pl>
+Date: Thu, 3 Feb 2011 15:43:15 +0100
+Subject: [PATCH] Do not patch sources when PATCHED_SOURCES=yes is given
+
+This patch is backport from Ubuntu where it got included in eglibc
+2.12.1-0ubuntu1 package - LP: 612631
+
+During build of eglibc there are several patches applied. Then eglibc-source
+binary package is created - with patches sources and patches as separate files.
+
+The problem appears when I try to cross build eglibc using data from
+eglibc-source package - it fails on patching...
+
+---
+ rules.d/quilt.mk |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+Index: eglibc-2.13/debian/rules.d/quilt.mk
+===================================================================
+--- eglibc-2.13.orig/debian/rules.d/quilt.mk	2011-05-01 15:30:41.000000000 +0000
++++ eglibc-2.13/debian/rules.d/quilt.mk	2012-04-03 11:02:34.072757860 +0000
+@@ -9,6 +9,7 @@
+ 
+ patch: $(stamp)patch
+ $(stamp)patch:
++ifneq ($(PATCHED_SOURCES),yes)
+ 	@if $(QUILT) next >/dev/null 2>&1; then \
+ 	  echo "Applying patches... "; \
+ 	  $(QUILT) push -a -v ; \
+@@ -23,6 +24,7 @@
+ 	    QUILT_PC="$$pc" $(QUILT) push -a -v ; \
+ 	  fi ; \
+ 	fi
++endif
+ 	touch $@
+ 
+ unpatch:

@@ -1,0 +1,3 @@
+linux-libc-dev-armhf-cross: binary-nmu-uses-old-version-style 3.0-3.4cross1.72
+linux-libc-dev-armhf-cross: copyright-without-copyright-notice
+linux-libc-dev-armhf-cross: non-standard-dir-in-usr usr/arm-linux-gnueabihf/

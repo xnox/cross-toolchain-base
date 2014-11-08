@@ -1,0 +1,17 @@
+---
+ nscd/Makefile |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: eglibc-2.13/nscd/Makefile
+===================================================================
+--- eglibc-2.13.orig/nscd/Makefile	2009-06-24 16:26:34.000000000 +0000
++++ eglibc-2.13/nscd/Makefile	2012-04-03 11:02:34.036757860 +0000
+@@ -80,7 +80,7 @@
+ $(objpfx)selinux.o: sysincludes = # nothing
+ endif
+ 
+-LDLIBS-nscd = $(selinux-LIBS)
++LDLIBS-nscd = $(selinux-LIBS) $(objdir)/elf/ld-linux.so.3
+ 
+ distribute := nscd.h nscd-client.h dbg_log.h \
+ 	      $(addsuffix .c, $(filter-out xmalloc,$(all-nscd-modules))) \

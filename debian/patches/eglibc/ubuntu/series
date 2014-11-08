@@ -1,0 +1,6 @@
+dpkg-shlibs.patch
+local-kill-locales.patch
+no-symlinks-for-no-multiarch.patch
+no-stack-protector.diff
+install-stubs.patch
+multilib-stage1.diff

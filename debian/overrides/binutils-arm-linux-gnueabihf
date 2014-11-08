@@ -1,0 +1,6 @@
+binutils-arm-linux-gnueabihf: executable-not-elf-or-script usr/x86_64-linux-gnu/arm-linux-gnueabihfhf/lib/libbfd.la
+binutils-arm-linux-gnueabihf: executable-not-elf-or-script usr/x86_64-linux-gnu/arm-linux-gnueabihfhf/lib/libopcodes.la
+binutils-arm-linux-gnueabihf: non-empty-dependency_libs-in-la-file usr/x86_64-linux-gnu/arm-linux-gnueabihfhf/lib/libbfd.la
+binutils-arm-linux-gnueabihf: non-empty-dependency_libs-in-la-file usr/x86_64-linux-gnu/arm-linux-gnueabihfhf/lib/libopcodes.la
+binutils-arm-linux-gnueabihf: non-standard-dir-in-usr usr/arm-linux-gnueabihfhf/
+binutils-arm-linux-gnueabihf: non-standard-dir-in-usr usr/x86_64-linux-gnu/

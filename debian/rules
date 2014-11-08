@@ -1,0 +1,596 @@
+#!/usr/bin/make -f
+
+# prefix for builds - without leading slash
+PF ?= usr
+
+# Linaro toolchain backports PPA support
+PPA := false
+
+# if debian/ppa is present then we do PPA
+ifneq ($(wildcard debian/ppa),)
+  PPA := true
+endif
+
+# Support multiple makes at once based on number of processors
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+NJOBS=parallel=$(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+else
+NJOBS=
+endif
+
+DEB_NAME_ACT     := $(shell dpkg-parsechangelog| sed -n 's/-*//; s/^Source: \(.*\)/\1/p')
+DEB_VER_ACT      := $(shell dpkg-parsechangelog| sed -n 's/^Version: \(.*\)/\1/p')
+
+CROSS_ARCH       := $(shell dpkg-parsechangelog| sed -n 's/-[^-]*//; s/^Source: \(.*\)-.*-.*/\1/p')
+ifeq ($(CROSS_ARCH),armhf)
+CROSS_BIARCH     := armel
+else ifeq ($(CROSS_ARCH),powerpc)
+CROSS_BIARCH     := ppc64
+endif
+CROSS_GNU_TYPE   := $(shell dpkg-architecture -a${CROSS_ARCH} -qDEB_HOST_GNU_TYPE -f)
+HOST_ARCH        := $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
+HOST_GNU_TYPE    := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+stamp            := stamp-dir/
+
+DISTRO ?= $(shell lsb_release -is)
+
+ifeq ($(DISTRO),Debian)
+  MIN_VER_GLIBC := 2.13-5~
+  MIN_VER_LINUX  := 3.2
+  MIN_VER_GCC    := 4.7.2-5
+  VER_LINUX      := $(shell apt-cache policy linux-source|grep '\*\*\*'|sed -e 's/ ... \([0-9\.]*\)+.*/\1/g')
+  DEB_VER_LINUX  := $(shell apt-cache policy linux-source-3.2|grep '\*\*\*'|sed -e 's/ ... \([0-9\.\-]*\).*/\1/g')
+# default version of gcc which will be used
+  VER_GCC_BASE   := 4.7
+else
+  MIN_VER_GLIBC := 2.19-0~
+  MIN_VER_LINUX  := 3.13.0-0~
+  MIN_VER_GCC    := 4.8.2-16
+  VER_LINUX      := $(shell apt-cache policy linux-source|sed -n -e's/^[[:space:]]*Candidate: \([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p')
+# default version of gcc which will be used
+  VER_GCC_BASE := 4.8
+endif
+
+EXTRA_DEPS := 
+# this is a hack to include the non-default stubs-<abi>.h header
+# really should be built here within this source package
+ifeq ($(CROSS_ARCH),armhf)
+  EXTRA_DEPS += libc6-dev-armel-cross,
+else ifeq ($(CROSS_ARCH),armel)
+  EXTRA_DEPS += libc6-dev-armhf-cross,
+endif
+
+ifeq ($(PPA),false)
+
+  VER_GCC          := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+  DEB_VER_GCC      := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+  VER_BINUTILS     := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-'|cut -d '.' -f1-3)
+  PKG_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+  DEB_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+  VER_GLIBC        := $(shell dpkg-parsechangelog -l/usr/src/glibc/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+  DEB_VER_GLIBC    := $(shell dpkg-parsechangelog -l/usr/src/glibc/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+
+  BINUTILS_DIR  := /usr/src/binutils
+  GLIBC_DIR     := /usr/src/glibc
+  GCC_DIR       := /usr/src/gcc-${VER_GCC_BASE}
+
+  ifeq ($(DISTRO),Debian)
+
+    GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/debian
+    LINUX_SERIES   := $(CURDIR)/debian/patches/linux/series-debian
+
+  else # Ubuntu
+
+    DEB_VER_LINUX    := $(shell dpkg-parsechangelog -l/usr/src/linux-source-$(VER_LINUX)/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+
+    GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/ubuntu
+    LINUX_SERIES   := $(CURDIR)/debian/patches/linux/series-ubuntu
+
+  endif
+
+else # Linaro toolchain backport PPA
+
+  VER_GCC          := 4.7.2
+  VER_GLIBC        := 2.16
+  VER_BINUTILS     := 2.22.52
+  EXTRA_DEPS       := 
+
+  DEB_VER_LINUX    := $(shell dpkg-parsechangelog -l/usr/src/linux-source-$(VER_LINUX)/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+  DEB_VER_GCC      := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}-${VER_GCC}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+  DEB_VER_GLIBC    := $(shell dpkg-parsechangelog -l/usr/src/glibc-${VER_GLIBC}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+  PKG_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils-${VER_BINUTILS}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+  DEB_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils-${VER_BINUTILS}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+
+  BINUTILS_DIR  := /usr/src/binutils-${VER_BINUTILS}
+  GLIBC_DIR     := /usr/src/glibc-${VER_GLIBC}
+  GCC_DIR       := /usr/src/gcc-${VER_GCC_BASE}-${VER_GCC}
+
+  GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/ubuntu
+  LINUX_SERIES   := $(CURDIR)/debian/patches/linux/series-ubuntu
+
+endif
+
+# taken from gcc packaging
+define unpack_tarball
+	tar -x -f $1
+endef
+
+info:
+	@echo "Binutils version:         ${VER_BINUTILS}	${DEB_VER_BINUTILS}	${PKG_VER_BINUTILS}"
+	@echo "GCC version:              ${VER_GCC}       	${DEB_VER_GCC}          ${VER_GCC_BASE}"
+	@echo "Glibc version:            ${VER_GLIBC}  		${DEB_VER_GLIBC}"
+	@echo "Linux version:            ${VER_LINUX}   	${DEB_VER_LINUX}"
+	@echo
+	@echo "Target architecture:      ${CROSS_ARCH}"
+	@echo "Target GNU type:          ${CROSS_GNU_TYPE}"
+	@echo "Host architecture:        ${HOST_ARCH}"
+	@echo "Host GNU type:            ${HOST_GNU_TYPE}"
+
+$(stamp)init-dirs:
+	mkdir debian/tmp -p
+	touch $@
+
+init: $(stamp)init-binutils $(stamp)init-gcc $(stamp)init-glibc
+
+$(stamp)init-linux:
+	@echo START $@
+ifeq ($(DISTRO),Debian)
+	$(call unpack_tarball, /usr/src/linux-source-${VER_LINUX}.tar.bz2)
+	cd linux-source-${VER_LINUX} && QUILT_PATCHES=${CURDIR}/debian/patches/linux quilt --quiltrc /dev/null  push -a
+else
+	$(call unpack_tarball, /usr/src/linux-source-${VER_LINUX}/linux-source-${VER_LINUX}.tar.bz2)
+	cp -a /usr/src/linux-source-${VER_LINUX}/debian linux-source-${VER_LINUX}/debian
+	cp -a /usr/src/linux-source-${VER_LINUX}/debian.master linux-source-${VER_LINUX}/debian.master
+	mkdir -p linux-source-${VER_LINUX}/debian/stamps/
+  ifeq (${CROSS_ARCH},armel)
+	# armel is no longer supported in raring but we need to get linux-libc-dev_armel.deb for cross compiler
+	cd linux-source-${VER_LINUX}/debian.master ;\
+	sed -i -e 's/armhf/armhf armel/g' control.stub control control.stub.in etc/kernelconfig ;\
+	cd rules.d && ln -s armhf.mk armel.mk
+  endif
+endif
+	touch $@
+
+ifeq ($(DISTRO),Debian)
+$(stamp)build-linux: $(stamp)init-linux
+	@echo START $@
+	set -e; \
+	export DEBMAIL="`dpkg-parsechangelog |grep ^Maintainer | sed -e 's/^Maintainer: //g'`"; \
+	export DEBEMAIL="`echo $$DEBMAIL | sed -e 's/.*<\(.*\)>/\1/g'`"; \
+	export DEBFULLNAME="`echo $$DEBMAIL | sed -e 's/\(.*\)<.*>/\1/g'`"; \
+	cd linux-source-${VER_LINUX} ;\
+	export ARCH=arm ;\
+	make omap2plus_defconfig ;\
+	make oldnoconfig ;\
+	echo 1 >.version ;\
+	make deb-pkg
+	rm -rf tmp
+	install -d tmp
+	dpkg-deb -x linux-libc-dev_${DEB_VER_LINUX}_armel.deb tmp
+	dpkg-deb -e linux-libc-dev_${DEB_VER_LINUX}_armel.deb tmp/DEBIAN
+	sed -i -e 's/armel/${CROSS_ARCH}/g' tmp/DEBIAN/control
+	cd tmp/usr/include ;\
+	rm -rf drm scsi ;\
+	rm -f `find . -name .install` ;\
+	rm -f `find . -name ..install.cmd`
+	PKG_IGNORE_CURRENTLY_BUILDING=1 dpkg-deb -b tmp linux-libc-dev_${DEB_VER_LINUX}_${CROSS_ARCH}.deb
+	rm -rf tmp
+	install -d tmp
+	touch $@
+else
+$(stamp)build-linux: $(stamp)init-linux
+	@echo START $@
+	set -e; \
+	cd linux-source-${VER_LINUX} ;\
+	fakeroot make -f debian/rules clean ;\
+	DEB_STAGE=stage1 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -a${CROSS_ARCH} -d
+	touch $@
+endif
+
+$(stamp)install-linux: $(stamp)build-linux $(stamp)init-dirs
+	@echo START $@
+	dpkg-deb -x linux-libc-dev_${DEB_VER_LINUX}*_${CROSS_ARCH}.deb debian/tmp
+ifeq ($(DISTRO),Ubuntu)
+# linux-libc-dev got multiarched in 2.6.38-8.42 and we need to take care of it - LP: #750585
+	ln -sf $(CURDIR)/debian/tmp/usr/include/${CROSS_GNU_TYPE}/asm/ $(CURDIR)/debian/tmp/usr/include/asm
+endif
+	touch $@
+
+define init_binutils
+	$(call unpack_tarball, ${BINUTILS_DIR}/binutils-${VER_BINUTILS}.tar.xz)
+	set -e; \
+	cd binutils-${PKG_VER_BINUTILS} ;\
+	cp -a ${BINUTILS_DIR}/debian/ . ;\
+	if [ -n "$$(grep -v '^\#' ${CURDIR}/debian/patches/binutils/series)" ]; then \
+	  QUILT_PATCHES=${CURDIR}/debian/patches/binutils quilt --quiltrc /dev/null  push -a; \
+	fi; \
+	echo ${CROSS_ARCH} > debian/target;
+endef
+
+$(stamp)init-binutils:
+	@echo START $@
+	$(call init_binutils)
+	touch $@
+
+$(stamp)build-binutils: $(stamp)init-binutils
+	@echo START $@
+	set -e ;\
+	cd binutils-${PKG_VER_BINUTILS} ;\
+	WITH_SYSROOT=${CURDIR}/debian/tmp PATCHED_SOURCES=yes PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -nc -d
+	# binutils wants dejagnu to generate docs which are not generate during cross build
+	touch $@
+
+$(stamp)install-binutils: $(stamp)build-binutils $(stamp)init-dirs
+	@echo START $@
+	dpkg-deb -x binutils-${CROSS_GNU_TYPE}_${DEB_VER_BINUTILS}_${HOST_ARCH}.deb debian/tmp
+	rm -f debian/tmp/usr/bin/*.exe
+	for i in debian/tmp/usr/bin/*; do \
+	  mv $$i $$i.exe; \
+	  ( \
+	    echo '#!/bin/sh'; \
+	    echo 'LD_LIBRARY_PATH=$(CURDIR)/debian/tmp/usr/$(HOST_GNU_TYPE)/${CROSS_GNU_TYPE}/lib$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH}'; \
+	    echo 'export LD_LIBRARY_PATH'; \
+	    echo 'exec $$0.exe "$$@"'; \
+	  ) > $$i; \
+	  chmod +x $$i; \
+	done
+	touch $@
+
+$(stamp)init-gcc:
+	@echo START $@
+	set -e; \
+	mkdir gcc -p ; \
+	cd gcc ; \
+	ln -sf ${GCC_DIR}/gcc-${VER_GCC}.tar.xz gcc-${VER_GCC}.tar.xz ;\
+	cp -a  ${GCC_DIR}/debian/ . ; \
+	if [ -n "$$(grep -v '^\#' ${CURDIR}/debian/patches/gcc-${VER_GCC_BASE}/series)" ]; then \
+	  QUILT_PATCHES=${CURDIR}/debian/patches/gcc-${VER_GCC_BASE} quilt --quiltrc /dev/null  push -a ; \
+	fi; \
+	echo ${CROSS_ARCH} >debian/target
+	touch $@
+
+$(stamp)build-gcc1: $(stamp)init-gcc $(stamp)install-binutils
+	@echo START $@
+	export PATH=${CURDIR}/debian/tmp/$(PF)/bin/:${PATH} ;\
+	cd gcc && DH_VERBOSE=1 WITH_SYSROOT=/ WITH_BUILD_SYSROOT=${CURDIR}/debian/tmp DEB_STAGE=stage1 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -d
+	touch $@
+
+$(stamp)install-gcc1: $(stamp)build-gcc1
+	@echo START $@
+	$(call install_gcc)
+	cp -r gcc/build/gcc/include debian/tmp/$(PF)/lib/gcc-cross/${CROSS_GNU_TYPE}/${VER_GCC_BASE}/
+	cp -r gcc/build/gcc/include-fixed debian/tmp/$(PF)/lib/gcc-cross/${CROSS_GNU_TYPE}/${VER_GCC_BASE}/
+ifeq ($(CROSS_ARCH),armhf)
+	dpkg-deb -x libsfgcc-${VER_GCC_BASE}-dev-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+else ifeq ($(CROSS_ARCH),powerpc)
+	dpkg-deb -x lib64gcc-${VER_GCC_BASE}-dev-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+endif
+
+	touch $@
+
+define install_gcc
+	dpkg-deb -x gcc-${VER_GCC_BASE}-${CROSS_GNU_TYPE}_${DEB_VER_GCC}_${HOST_ARCH}.deb debian/tmp
+	dpkg-deb -x cpp-${VER_GCC_BASE}-${CROSS_GNU_TYPE}_${DEB_VER_GCC}_${HOST_ARCH}.deb debian/tmp
+	dpkg-deb -x libgcc-${VER_GCC_BASE}-dev-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+	cd debian/tmp/$(PF)/bin/ && \
+	ln -sf ${CROSS_GNU_TYPE}-gcc-${VER_GCC} ${CROSS_GNU_TYPE}-gcc && \
+	ln -sf ${CROSS_GNU_TYPE}-cpp-${VER_GCC} ${CROSS_GNU_TYPE}-cpp && \
+	ln -sf ${CROSS_GNU_TYPE}-gcov-${VER_GCC} ${CROSS_GNU_TYPE}-gcov
+endef
+
+$(stamp)build-gcc2: $(stamp)init-gcc $(stamp)install-glibc1
+	@echo START $@
+	export PATH=${CURDIR}/debian/tmp/$(PF)/bin:${PATH} ;\
+	export LD_LIBRARY_PATH=${CURDIR}/debian/tmp/$(PF)/$(HOST_GNU_TYPE)/${CROSS_GNU_TYPE}/lib/:${CURDIR}/debian/tmp/usr/lib:${CURDIR}/debian/tmp/lib ;\
+	cd gcc && DH_VERBOSE=1 WITH_SYSROOT=/ WITH_BUILD_SYSROOT=${CURDIR}/debian/tmp DEB_STAGE=stage2 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -d
+	touch $@
+
+$(stamp)install-gcc2: $(stamp)build-gcc2
+	@echo START $@
+	$(call install_gcc)
+	dpkg-deb -x libgcc1-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+ifeq ($(CROSS_ARCH),armhf)
+	dpkg-deb -x libsfgcc1-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+	dpkg-deb -x libsfgcc-${VER_GCC_BASE}-dev-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+else ifeq ($(CROSS_ARCH),powerpc)
+	dpkg-deb -x lib64gcc1-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+	dpkg-deb -x lib64gcc-${VER_GCC_BASE}-dev-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb debian/tmp
+endif
+	touch $@
+
+$(stamp)build-gcc3: $(stamp)init-gcc $(stamp)install-glibc2
+	@echo START $@
+	export PATH=${CURDIR}/debian/tmp/$(PF)/bin/:${PATH} ;\
+	export LD_LIBRARY_PATH=${CURDIR}/debian/tmp/$(PF)/$(HOST_GNU_TYPE)/${CROSS_GNU_TYPE}/lib/:${CURDIR}/debian/tmp/usr/lib:${CURDIR}/debian/tmp/lib ;\
+	cd gcc && WITH_BUILD_SYSROOT=${CURDIR}/debian/tmp DEB_STAGE=stage2 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -d
+	touch $@
+
+$(stamp)init-glibc:
+	@echo START $@
+	rm -rf glibc-${VER_GLIBC}
+	$(call unpack_tarball, ${GLIBC_DIR}/glibc-${VER_GLIBC}.tar.xz)
+	cp -a ${GLIBC_DIR}/debian/ glibc-${VER_GLIBC}
+	cd glibc-${VER_GLIBC} ; \
+	QUILT_PATCHES=${GLIBC_PATCHES} quilt --quiltrc /dev/null push -a && \
+	rm -rf .pc/
+	touch $@
+
+$(stamp)build-glibc1: $(stamp)init-glibc $(stamp)install-linux $(stamp)install-gcc1
+	@echo START $@
+# FIXME: why debian/libgcc1-armel-cross?
+	export PATH=${CURDIR}/debian/tmp/$(PF)/bin/:${PATH} ;\
+	export LD_LIBRARY_PATH=${CURDIR}/debian/tmp/$(PF)/$(HOST_GNU_TYPE)/${CROSS_GNU_TYPE}/lib/:${CURDIR}/gcc/debian/libgcc1-armel-cross/usr/${CROSS_GNU_TYPE}/lib/ ;\
+	export LINUX_SOURCE=${CURDIR}/debian/tmp/usr ;\
+	cd glibc-${VER_GLIBC} ;\
+	PATCHED_SOURCES=yes WITH_BUILD_SYSROOT=${CURDIR}/debian/tmp DEB_BUILD_PROFILES=stage1 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false fakeroot dpkg-buildpackage -b -uc -us -a${CROSS_ARCH} -d
+	touch $@
+
+$(stamp)install-glibc1: $(stamp)build-glibc1
+	@echo START $@
+	dpkg-deb -x libc6-dev_${DEB_VER_GLIBC}_${CROSS_ARCH}.deb debian/tmp
+ifeq ($(CROSS_ARCH),armhf)
+	dpkg-deb -x libc6-dev-armel_${DEB_VER_GLIBC}_${CROSS_ARCH}.deb debian/tmp
+else ifeq ($(CROSS_ARCH),powerpc)
+	dpkg-deb -x libc6-dev-ppc64_${DEB_VER_GLIBC}_${CROSS_ARCH}.deb debian/tmp
+endif
+	: # FIXME: why is this needed?
+	cd debian/tmp/usr/lib ;\
+	for crt in ${CROSS_GNU_TYPE}/crt*; do \
+		ln -sf $$crt `basename $$crt`; \
+	done
+	: # dpkg-shlibdeps for the stage2 gcc needs these
+	for d in $$(find debian/tmp/usr/lib -name libc.so -printf '%h\n'); do \
+	  ln -sf libc.so $$d/libc.so.6; \
+	done
+	touch $@
+
+$(stamp)build-glibc2: $(stamp)init-glibc $(stamp)install-gcc2
+	@echo START $@
+# FIXME: why debian/libgcc1-armel-cross?
+	export PATH=${CURDIR}/debian/tmp/$(PF)/bin/:${PATH} ;\
+	export LD_LIBRARY_PATH=${CURDIR}/debian/tmp/$(PF)/$(HOST_GNU_TYPE)/${CROSS_GNU_TYPE}/lib/:${CURDIR}/gcc/debian/libgcc1-armel-cross/usr/${CROSS_GNU_TYPE}/lib/ ;\
+	export LINUX_SOURCE=${CURDIR}/debian/tmp/usr ;\
+	export DEB_BUILD_OPTIONS="nocheck notest notests ${NJOBS}" ; \
+	cd glibc-${VER_GLIBC} && PATCHED_SOURCES=yes WITH_BUILD_SYSROOT=${CURDIR}/debian/tmp DEB_BUILD_PROFILES=stage2 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false fakeroot dpkg-buildpackage -b -uc -us -a${CROSS_ARCH} -d
+	touch $@
+
+$(stamp)install-glibc2: $(stamp)build-glibc2
+	@echo START $@
+	for deb in *${DEB_VER_GLIBC}*.deb; \
+	do \
+		dpkg-deb -x $$deb debian/tmp; \
+	done; \
+	bash debian/fix-links ${CROSS_GNU_TYPE}; \
+	touch $@
+
+clean:
+	rm -rf linux-source-${VER_LINUX}
+	rm -rf glibc-${VER_GLIBC}
+	rm -rf gcc gcc48
+	rm -rf binutils-${PKG_VER_BINUTILS}
+	rm -rf debian/tmp debian/files
+	find debian -name '*~' | xargs -r rm -f
+	rm -f *.*deb *.changes
+	rm -rf repackfiles tmp
+	rm -rf $(stamp)
+	mkdir $(stamp)
+	dh_clean
+
+# using wildcard for DEB_LIST_ALL gave only problems
+DEB_LIST_ALL = \
+	libc6-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb \
+	libc6-dbg-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb \
+	libc6-dev-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb \
+	linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}*_all.deb \
+
+ifeq ($(CROSS_ARCH),armhf)
+DEB_LIST_ALL += \
+	libc6-${CROSS_BIARCH}-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb \
+	libc6-dev-${CROSS_BIARCH}-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb
+else ifeq ($(CROSS_ARCH),powerpc)
+DEB_LIST_ALL += \
+	libc6-${CROSS_BIARCH}-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb \
+	libc6-dev-${CROSS_BIARCH}-${CROSS_ARCH}-cross_${VER_GLIBC}-*_all.deb
+endif
+
+#           libgcc1-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb  \
+#           libgcc1-dbg-${CROSS_ARCH}-cross_${DEB_VER_GCC}_all.deb  \
+
+#
+# Repack resulting packages to make some changes;
+# - I want libgcc1 to contain changelog etc which normally are in gcc-${VER_GCC_BASE}-*-base package
+# - libgcc1(-dbg) should depend on proper version libgcc1 (epoch hardcoded)
+# - libgcc1-dbg needs to have doc symlink to libgcc1
+# - linux-libc-dev gets copyright and changelog
+# - libc6 gets copyright and changelog
+# - libc6 gets dependencies removed (no dependency on libgcc1)
+# - libc6-dev-armhf-cross ships symlink to /usr/arm-linux-gnueabi/lib/hf for multilib cross compiler
+define repack_debs
+	@for deb in $1; \
+	do \
+	    echo "repack $$deb ..."; \
+	    rm -rf tmp/*; \
+	    dpkg-deb -x $$deb tmp; \
+	    dpkg-deb -e $$deb tmp/DEBIAN; \
+	    pkgname=`echo $$deb | cut -d'_' -f1`; \
+	    sed -i -e's/^Source:.*/Source: ${DEB_NAME_ACT} (${DEB_VER_ACT})/' tmp/DEBIAN/control; \
+	    sed -i -e "s/${DEB_VER_LINUX}/${DEB_VER_LINUX}cross${DEB_VER_ACT}/g" tmp/DEBIAN/control ; \
+	    sed -i -e "s/Version: ${VER_LINUX}-\(.*\)$$/Version: ${VER_LINUX}-\1cross${DEB_VER_ACT}/g" tmp/DEBIAN/control ; \
+	    sed -i -e "s/${DEB_VER_GLIBC}/${DEB_VER_GLIBC}cross${DEB_VER_ACT}/g" tmp/DEBIAN/control ; \
+	    sed -i -e "s/${DEB_VER_GCC}/${DEB_VER_GCC}cross${DEB_VER_ACT}/g" tmp/DEBIAN/control ; \
+	    sed -i -e "s/cross${DEB_VER_ACT}cross${DEB_VER_ACT}/cross${DEB_VER_ACT}/g" tmp/DEBIAN/control ; \
+	    if [ -e debian/overrides/$$pkgname ]; then \
+		  mkdir -p tmp/usr/share/lintian/overrides; \
+		  cp debian/overrides/$$pkgname tmp/usr/share/lintian/overrides/; \
+	    fi; \
+	    if [ 'libgcc1-dbg-${CROSS_ARCH}-cross' = $$pkgname ]; then \
+	      sed -i -e 's/^Depends.*/Depends: libgcc1-${CROSS_ARCH}-cross (= 1:${DEB_VER_GCC}cross${DEB_VER_ACT})/g' tmp/DEBIAN/control; \
+	      ln -sf libgcc1-${CROSS_ARCH}-cross tmp/usr/share/doc/libgcc1-dbg-${CROSS_ARCH}-cross; \
+	    fi; \
+	    if [ 'libgcc1-${CROSS_ARCH}-cross' = $$pkgname ]; then \
+	      sed -i -e'/^Depends/d' tmp/DEBIAN/control; \
+	      rm tmp/usr/share/doc/libgcc1-${CROSS_ARCH}-cross; \
+	      mkdir -p tmp/usr/share/doc/libgcc1-${CROSS_ARCH}-cross; \
+	      cp gcc48/debian/gcc-${VER_GCC_BASE}-${CROSS_GNU_TYPE}-base/usr/share/doc/gcc-${VER_GCC_BASE}-${CROSS_GNU_TYPE}-base/* tmp/usr/share/doc/libgcc1-${CROSS_ARCH}-cross; \
+	      mv tmp/usr/share/doc/libgcc1-${CROSS_ARCH}-cross/changelog.Debian.gz \
+	         tmp/usr/share/doc/libgcc1-${CROSS_ARCH}-cross/changelog.Debian.gcc-${VER_GCC_BASE}.gz; \
+	      gzip -c9 debian/changelog > tmp/usr/share/doc/libgcc1-${CROSS_ARCH}-cross/changelog.Debian.gz;\
+	    fi; \
+	    if [ 'linux-libc-dev-${CROSS_ARCH}-cross' = $$pkgname ]; then \
+	      mkdir -p tmp/usr/share/doc/$$pkgname; \
+	      cp repackfiles/linux/usr/share/doc/linux-libc-dev/copyright tmp/usr/share/doc/$$pkgname; \
+	      cp repackfiles/linux/usr/share/doc/linux-libc-dev/changelog.Debian.gz tmp/usr/share/doc/$$pkgname; \
+	    fi; \
+	    if [ 'libc6-armel-cross' = $$pkgname ]; then \
+	          sed -i -e'/^Depends/d' tmp/DEBIAN/control; \
+	    fi; \
+	    if [ 'libc6-armhf-cross' = $$pkgname ]; then \
+	          sed -i -e'/^Depends/d' tmp/DEBIAN/control; \
+	    fi; \
+	    if [ 'libc6-arm64-cross' = $$pkgname ]; then \
+		  sed -i -e'/^Depends/d' tmp/DEBIAN/control; \
+	    fi; \
+	    if [ 'libc6-powerpc-cross' = $$pkgname ]; then \
+		  sed -i -e'/^Depends/d' tmp/DEBIAN/control; \
+	    fi; \
+	    if [ 'libc6-ppc64-powerpc-cross' = $$pkgname ]; then \
+		  sed -i -e'/^Depends/d' tmp/DEBIAN/control; \
+	    fi; \
+	    if [ 'libc6-dev-armel-cross' = $$pkgname ]; then \
+		  install -d tmp/usr/arm-linux-gnueabihf/lib; \
+		  ln -sf ../../arm-linux-gnueabi/lib tmp/usr/arm-linux-gnueabihf/lib/sf; \
+		  cp -p /usr/arm-linux-gnueabihf/include/gnu/stubs-hard.h tmp/usr/arm-linux-gnueabi/include/gnu/; \
+	    fi; \
+	    if [ 'libc6-dev-armhf-cross' = $$pkgname ]; then \
+		  install -d tmp/usr/arm-linux-gnueabi/lib; \
+		  ln -sf ../../arm-linux-gnueabihf/lib tmp/usr/arm-linux-gnueabi/lib/hf; \
+		  cp -p /usr/arm-linux-gnueabi/include/gnu/stubs-soft.h tmp/usr/arm-linux-gnueabihf/include/gnu/; \
+	    fi; \
+	    if [ 'libc6' = `echo $$pkgname | cut -d'-' -f1` ]; then \
+	      mkdir -p tmp/usr/share/doc/$$pkgname; \
+	      cp repackfiles/glibc/usr/share/doc/libc6/copyright tmp/usr/share/doc/$$pkgname; \
+	      cp repackfiles/glibc/usr/share/doc/libc6/changelog.Debian.gz tmp/usr/share/doc/$$pkgname; \
+	    fi; \
+	    (cd tmp && md5sum `find usr -type f` >>DEBIAN/md5sums);\
+	    newdeb=`echo $$deb|sed -e "s/\(.*\)_\(.*\)_\(.*\)/\1_\2cross${DEB_VER_ACT}_\3/g"`; \
+	    echo "    -> $$newdeb ..."; \
+	    PKG_IGNORE_CURRENTLY_BUILDING=1 dpkg-deb -b tmp/ ../$$newdeb; \
+	    echo "        done"; \
+	    rm -rf tmp/*; \
+	done
+endef
+
+repack-debs-indep: dpkg-cross
+	@echo START $@
+	install -d repackfiles/glibc repackfiles/linux
+	dpkg-deb -x libc6_${DEB_VER_GLIBC}_${CROSS_ARCH}.deb  repackfiles/glibc
+	dpkg-deb -x linux-libc-dev_${DEB_VER_LINUX}_${CROSS_ARCH}.deb  repackfiles/linux
+	$(call repack_debs, ${DEB_LIST_ALL})
+
+build-arch:
+build-indep: build
+build: $(stamp)build-gcc2 $(stamp)build-glibc2
+	# we do not need those packages
+	rm -f cpp-*_${HOST_ARCH}.*deb
+	rm -f gcc-*_${HOST_ARCH}.*deb
+	rm -f linux-headers*.*deb
+	rm -f *-doc*.*deb
+	rm -f *-source*.*deb
+	rm -f linux-tools-common_*.*deb
+	rm -f nscd*deb
+	rm -f libgcc1*deb
+
+binary: binary-arch binary-indep
+binary-arch:  build-arch
+binary-indep: build dpkg-cross mangle-debian-files-indep #$(stamp)make-dummies
+
+DUMMYNAME = 
+ifeq ($(CROSS_ARCH),armel)
+	DUMMYNAME = armel-armhf
+else ifeq ($(CROSS_ARCH),armhf)
+	DUMMYNAME = armhf-armel
+endif
+
+$(stamp)make-dummies: $(stamp)debian-files-base
+	install -d tmp2/DEBIAN
+ifneq (,$(DUMMYNAME))
+	install -m 0644 debian/dummies/libc6-dev-$(DUMMYNAME)-cross tmp2/DEBIAN/control
+	sed -i -e 's/VERSION/$(DEB_VER_GLIBC)cross$(DEB_VER_ACT)/g' tmp2/DEBIAN/control
+	sed -i -e 's/SRCNAME/$(DEB_NAME_ACT) ($(DEB_VER_ACT))/g' tmp2/DEBIAN/control
+	PKG_IGNORE_CURRENTLY_BUILDING=1 dpkg-deb -b tmp2 ../libc6-dev-$(DUMMYNAME)-cross_$(DEB_VER_GLIBC)cross$(DEB_VER_ACT)_all.deb
+	$(call generate_debian_files, ../libc6-dev-$(DUMMYNAME)-cross_$(DEB_VER_GLIBC)cross$(DEB_VER_ACT)_all.deb)
+
+	install -m 0644 debian/dummies/libc6-$(DUMMYNAME)-cross tmp2/DEBIAN/control
+	sed -i -e 's/VERSION/$(DEB_VER_GLIBC)cross$(DEB_VER_ACT)/g' tmp2/DEBIAN/control
+	sed -i -e 's/SRCNAME/$(DEB_NAME_ACT) ($(DEB_VER_ACT))/g' tmp2/DEBIAN/control
+	PKG_IGNORE_CURRENTLY_BUILDING=1 dpkg-deb -b tmp2 ../libc6-$(DUMMYNAME)-cross_$(DEB_VER_GLIBC)cross$(DEB_VER_ACT)_all.deb
+	$(call generate_debian_files, ../libc6-$(DUMMYNAME)-cross_$(DEB_VER_GLIBC)cross$(DEB_VER_ACT)_all.deb)
+endif
+	touch $@
+
+$(stamp)debian-files-base:
+	@echo START $@
+	rm -f debian/files
+	touch $@
+
+define generate_debian_files
+	@for deb in $1; \
+	do \
+		echo -n "`basename $$deb` " >>debian/files; \
+		dpkg-deb -I $$deb | grep Section  | cut -d ' ' -f 3 | tr "\n" ' ' >>debian/files; \
+		dpkg-deb -I $$deb | grep Priority | cut -d ' ' -f 3 | tr -d "\n" >>debian/files; \
+		echo "" >>debian/files; \
+	done
+endef
+
+mangle-debian-files-indep: $(stamp)debian-files-base repack-debs-indep #$(stamp)make-dummies
+	@echo START $@
+	$(call generate_debian_files,   ${DEB_LIST_ALL})
+	sed -i -e "s/_all.deb/cross${DEB_VER_ACT}_all.deb/g" debian/files
+	sed -i -e "s/_${HOST_ARCH}.deb/cross${DEB_VER_ACT}_${HOST_ARCH}.deb/g" debian/files
+	sed -i -e "s/cross${DEB_VER_ACT}cross${DEB_VER_ACT}/cross${DEB_VER_ACT}/g" debian/files
+
+DPKG_CROSS_PKGS = \
+	libc6_*_${CROSS_ARCH}.deb libc6-d*_${CROSS_ARCH}.deb linux-libc-dev_*_${CROSS_ARCH}.deb
+ifeq ($(CROSS_ARCH),armhf)
+DPKG_CROSS_PKGS += \
+	libc6-armel_*_${CROSS_ARCH}.deb libc6-dev-armel_*_${CROSS_ARCH}.deb
+else ifeq ($(CROSS_ARCH),powerpc)
+DPKG_CROSS_PKGS += \
+	libc6-ppc64_*_${CROSS_ARCH}.deb libc6-dev-ppc64_*_${CROSS_ARCH}.deb
+endif
+
+dpkg-cross: build
+	@echo START $@
+	set -e; \
+	for deb in $(DPKG_CROSS_PKGS); do \
+	    echo dpkg-cross $$deb ...; \
+	    PKG_IGNORE_CURRENTLY_BUILDING=1 dpkg-cross -M -a ${CROSS_ARCH} \
+	    	-X dpkg -X findutils -X tzdata -X libc-bin -X libc-dev-bin \
+	    	-X debconf -X debconf-2.0 \
+	    	-b $$deb; \
+	done
+
+control:
+	@echo START $@
+	sed -e "s/CROSS_ARCH/${CROSS_ARCH}/g" \
+	    -e "s/CROSS_GNU_TYPE/${CROSS_GNU_TYPE}/g" \
+	    -e "s/CROSS_BIARCH/${CROSS_BIARCH}/g" \
+	    -e "s/MIN_VER_GLIBC/${MIN_VER_GLIBC}/g" \
+	    -e "s/MIN_VER_LINUX/${MIN_VER_LINUX}/g" \
+	    -e "s/VER_LINUX/${VER_LINUX}/g" \
+	    -e "s/MIN_VER_GCC/${MIN_VER_GCC}/g" \
+	    -e "s/VER_GCC_BASE/${VER_GCC_BASE}/g" \
+	    -e "s/EXTRA_DEPS/${EXTRA_DEPS}/g" \
+	  debian/control.in \
+	  $(if $(wildcard debian/control.$(CROSS_ARCH).in),debian/control.$(CROSS_ARCH).in) \
+	    >debian/control
+ifeq ($(PPA),true)
+	sed  \
+	    -e "s/binutils-source/binutils-${VER_BINUTILS}-source/g" \
+	    -e "s/glibc-source/glibc-${VER_GLIBC}-source/g" \
+	    -e "s/linux-source/linux-source-${VER_LINUX}/g" \
+	    -e "s/1.16.0~ubuntu6/1.15.5/g" \
+	    -e "s/gcc-${VER_GCC_BASE}-source/gcc-${VER_GCC_BASE}-${VER_GCC}-source/g" \
+	    -i $(CURDIR)/debian/control
+endif

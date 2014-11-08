@@ -1,0 +1,9 @@
+hack-fix-link-problem.diff
+local-kill-locales.patch
+local-remove-manual.diff
+ubuntu-backport-patched-sources-support.patch
+ubuntu-backport-stages-support.patch
+use-gcc-for-native-compile.patch
+stage1-fix-libdir.patch
+dpkg-shlibs.patch
+multilib-stage1.diff
