@@ -3,13 +3,7 @@
 # prefix for builds - without leading slash
 PF ?= usr
 
-# Linaro toolchain backports PPA support
-PPA := false
-
-# if debian/ppa is present then we do PPA
-ifneq ($(wildcard debian/ppa),)
-  PPA := true
-endif
+include debian/kernelarch.make
 
 # Support multiple makes at once based on number of processors
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
@@ -21,94 +15,38 @@ endif
 DEB_NAME_ACT     := $(shell dpkg-parsechangelog| sed -n 's/-*//; s/^Source: \(.*\)/\1/p')
 DEB_VER_ACT      := $(shell dpkg-parsechangelog| sed -n 's/^Version: \(.*\)/\1/p')
 
-CROSS_ARCH       := $(shell dpkg-parsechangelog| sed -n 's/-[^-]*//; s/^Source: \(.*\)-.*-.*/\1/p')
-ifeq ($(CROSS_ARCH),armhf)
-CROSS_BIARCH     := armel
-else ifeq ($(CROSS_ARCH),powerpc)
-CROSS_BIARCH     := ppc64
-endif
-CROSS_GNU_TYPE   := $(shell dpkg-architecture -a${CROSS_ARCH} -qDEB_HOST_GNU_TYPE -f)
 HOST_ARCH        := $(shell dpkg-architecture -qDEB_HOST_ARCH_CPU)
 HOST_GNU_TYPE    := $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 stamp            := stamp-dir/
 
-DISTRO ?= $(shell lsb_release -is)
+CROSS_ARCHES     ?= powerpc arm64 armhf armel
+CROSS_ARCH       = $(subst .,,$(suffix $@))
+KERNEL_ARCH      = $(KERNEL_ARCH_$(CROSS_ARCH))
+CROSS_BIARCH     = $(CROSS_BIARCH_$(CROSS_ARCH))
+_gnu_type        = $(shell dpkg-architecture -a$(1) -qDEB_HOST_GNU_TYPE -f)
+CROSS_GNU_TYPE   = $(call _gnu_type,${CROSS_ARCH})
 
-ifeq ($(DISTRO),Debian)
-  MIN_VER_GLIBC := 2.13-5~
-  MIN_VER_LINUX  := 3.2
-  MIN_VER_GCC    := 4.7.2-5
-  VER_LINUX      := $(shell apt-cache policy linux-source|grep '\*\*\*'|sed -e 's/ ... \([0-9\.]*\)+.*/\1/g')
-  DEB_VER_LINUX  := $(shell apt-cache policy linux-source-3.2|grep '\*\*\*'|sed -e 's/ ... \([0-9\.\-]*\).*/\1/g')
+MIN_VER_GLIBC  := 2.19-0~
+MIN_VER_LINUX  := 3.13.0-0~
+MIN_VER_GCC    := 4.8.2-16
 # default version of gcc which will be used
-  VER_GCC_BASE   := 4.7
-else
-  MIN_VER_GLIBC := 2.19-0~
-  MIN_VER_LINUX  := 3.13.0-0~
-  MIN_VER_GCC    := 4.8.2-16
-  VER_LINUX      := $(shell apt-cache policy linux-source|sed -n -e's/^[[:space:]]*Candidate: \([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p')
-# default version of gcc which will be used
-  VER_GCC_BASE := 4.8
-endif
+DEB_VER_LINUX  := $(shell apt-cache policy linux-source|grep '\*\*\*'|sed -e 's/ ... \([0-9\.\-]*\).*/\1/g')
+VER_LINUX      := $(subst $( ),.,$(wordlist 1, 3, $(subst .,$( ),$(DEB_VER_LINUX))))
+VER_GCC_BASE   := $(shell apt-cache policy gcc|grep '\*\*\*'|sed -e 's/ .....:\([0-9].[0-9]\).*/\1/g')
 
-EXTRA_DEPS := 
-# this is a hack to include the non-default stubs-<abi>.h header
-# really should be built here within this source package
-ifeq ($(CROSS_ARCH),armhf)
-  EXTRA_DEPS += libc6-dev-armel-cross,
-else ifeq ($(CROSS_ARCH),armel)
-  EXTRA_DEPS += libc6-dev-armhf-cross,
-endif
+VER_GCC          := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+DEB_VER_GCC      := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+VER_BINUTILS     := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-'|cut -d '.' -f1-3)
+PKG_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+DEB_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
+VER_GLIBC        := $(shell dpkg-parsechangelog -l/usr/src/glibc/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
+DEB_VER_GLIBC    := $(shell dpkg-parsechangelog -l/usr/src/glibc/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
 
-ifeq ($(PPA),false)
+BINUTILS_DIR  := /usr/src/binutils
+GLIBC_DIR     := /usr/src/glibc
+GCC_DIR       := /usr/src/gcc-${VER_GCC_BASE}
 
-  VER_GCC          := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
-  DEB_VER_GCC      := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-  VER_BINUTILS     := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-'|cut -d '.' -f1-3)
-  PKG_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
-  DEB_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-  VER_GLIBC        := $(shell dpkg-parsechangelog -l/usr/src/glibc/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
-  DEB_VER_GLIBC    := $(shell dpkg-parsechangelog -l/usr/src/glibc/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-
-  BINUTILS_DIR  := /usr/src/binutils
-  GLIBC_DIR     := /usr/src/glibc
-  GCC_DIR       := /usr/src/gcc-${VER_GCC_BASE}
-
-  ifeq ($(DISTRO),Debian)
-
-    GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/debian
-    LINUX_SERIES   := $(CURDIR)/debian/patches/linux/series-debian
-
-  else # Ubuntu
-
-    DEB_VER_LINUX    := $(shell dpkg-parsechangelog -l/usr/src/linux-source-$(VER_LINUX)/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-
-    GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/ubuntu
-    LINUX_SERIES   := $(CURDIR)/debian/patches/linux/series-ubuntu
-
-  endif
-
-else # Linaro toolchain backport PPA
-
-  VER_GCC          := 4.7.2
-  VER_GLIBC        := 2.16
-  VER_BINUTILS     := 2.22.52
-  EXTRA_DEPS       := 
-
-  DEB_VER_LINUX    := $(shell dpkg-parsechangelog -l/usr/src/linux-source-$(VER_LINUX)/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-  DEB_VER_GCC      := $(shell dpkg-parsechangelog -l/usr/src/gcc-${VER_GCC_BASE}-${VER_GCC}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-  DEB_VER_GLIBC    := $(shell dpkg-parsechangelog -l/usr/src/glibc-${VER_GLIBC}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-  PKG_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils-${VER_BINUTILS}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' '|cut -f 1 -d '-')
-  DEB_VER_BINUTILS := $(shell dpkg-parsechangelog -l/usr/src/binutils-${VER_BINUTILS}/debian/changelog | egrep '^Version:' | cut -f 2 -d ' ')
-
-  BINUTILS_DIR  := /usr/src/binutils-${VER_BINUTILS}
-  GLIBC_DIR     := /usr/src/glibc-${VER_GLIBC}
-  GCC_DIR       := /usr/src/gcc-${VER_GCC_BASE}-${VER_GCC}
-
-  GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/ubuntu
-  LINUX_SERIES   := $(CURDIR)/debian/patches/linux/series-ubuntu
-
-endif
+GLIBC_PATCHES  := $(CURDIR)/debian/patches/eglibc/ubuntu
 
 # taken from gcc packaging
 define unpack_tarball
@@ -126,75 +64,62 @@ info:
 	@echo "Host architecture:        ${HOST_ARCH}"
 	@echo "Host GNU type:            ${HOST_GNU_TYPE}"
 
+%:
+	dh $@
+
+
+override_dh_auto_install: $(foreach arch,$(CROSS_ARCHES),$(addsuffix .$(arch),$(stamp)install-linux))
+
+override_dh_auto_build: $(foreach arch,$(CROSS_ARCHES),$(addsuffix .$(arch),$(stamp)build-linux))
+
 $(stamp)init-dirs:
 	mkdir debian/tmp -p
 	touch $@
 
-init: $(stamp)init-binutils $(stamp)init-gcc $(stamp)init-glibc
+#init: $(stamp)init-binutils $(stamp)init-gcc $(stamp)init-glibc
+init: $(stamp)init-linux
 
 $(stamp)init-linux:
 	@echo START $@
-ifeq ($(DISTRO),Debian)
-	$(call unpack_tarball, /usr/src/linux-source-${VER_LINUX}.tar.bz2)
-	cd linux-source-${VER_LINUX} && QUILT_PATCHES=${CURDIR}/debian/patches/linux quilt --quiltrc /dev/null  push -a
-else
-	$(call unpack_tarball, /usr/src/linux-source-${VER_LINUX}/linux-source-${VER_LINUX}.tar.bz2)
-	cp -a /usr/src/linux-source-${VER_LINUX}/debian linux-source-${VER_LINUX}/debian
-	cp -a /usr/src/linux-source-${VER_LINUX}/debian.master linux-source-${VER_LINUX}/debian.master
-	mkdir -p linux-source-${VER_LINUX}/debian/stamps/
-  ifeq (${CROSS_ARCH},armel)
-	# armel is no longer supported in raring but we need to get linux-libc-dev_armel.deb for cross compiler
-	cd linux-source-${VER_LINUX}/debian.master ;\
-	sed -i -e 's/armhf/armhf armel/g' control.stub control control.stub.in etc/kernelconfig ;\
-	cd rules.d && ln -s armhf.mk armel.mk
-  endif
-endif
+	$(call unpack_tarball, $(firstword $(wildcard /usr/src/linux-source-$(VER_LINUX).tar.* /usr/src/linux-source-$(VER_LINUX)/linux-source-$(VER_LINUX).tar.*)))
 	touch $@
 
-ifeq ($(DISTRO),Debian)
-$(stamp)build-linux: $(stamp)init-linux
+$(stamp)build-linux.%: $(stamp)init-linux
 	@echo START $@
+	cp debian/builddeb linux-source-$(VER_LINUX)/scripts/package/
+	sed -i '/$$(MAKE)/d' linux-source-$(VER_LINUX)/scripts/package/Makefile
 	set -e; \
 	export DEBMAIL="`dpkg-parsechangelog |grep ^Maintainer | sed -e 's/^Maintainer: //g'`"; \
 	export DEBEMAIL="`echo $$DEBMAIL | sed -e 's/.*<\(.*\)>/\1/g'`"; \
 	export DEBFULLNAME="`echo $$DEBMAIL | sed -e 's/\(.*\)<.*>/\1/g'`"; \
+	export ARCH=${KERNEL_ARCH} ;\
+	export KBUILD_DEBARCH=${CROSS_ARCH} ;\
+	export KDEB_PKGVERSION=${DEB_VER_LINUX} ;\
 	cd linux-source-${VER_LINUX} ;\
-	export ARCH=arm ;\
-	make omap2plus_defconfig ;\
 	make oldnoconfig ;\
-	echo 1 >.version ;\
 	make deb-pkg
 	rm -rf tmp
 	install -d tmp
-	dpkg-deb -x linux-libc-dev_${DEB_VER_LINUX}_armel.deb tmp
-	dpkg-deb -e linux-libc-dev_${DEB_VER_LINUX}_armel.deb tmp/DEBIAN
-	sed -i -e 's/armel/${CROSS_ARCH}/g' tmp/DEBIAN/control
+	dpkg-deb -R linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}_all.deb tmp
 	cd tmp/usr/include ;\
 	rm -rf drm scsi ;\
 	rm -f `find . -name .install` ;\
 	rm -f `find . -name ..install.cmd`
-	PKG_IGNORE_CURRENTLY_BUILDING=1 dpkg-deb -b tmp linux-libc-dev_${DEB_VER_LINUX}_${CROSS_ARCH}.deb
+	mkdir tmp/usr/${CROSS_GNU_TYPE}
+	mv tmp/usr/include/ tmp/usr/${CROSS_GNU_TYPE}/include/
+	rm tmp/DEBIAN/md5sums
+	fakeroot dpkg-deb -b tmp linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}_all.deb
 	rm -rf tmp
 	install -d tmp
 	touch $@
-else
-$(stamp)build-linux: $(stamp)init-linux
-	@echo START $@
-	set -e; \
-	cd linux-source-${VER_LINUX} ;\
-	fakeroot make -f debian/rules clean ;\
-	DEB_STAGE=stage1 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -a${CROSS_ARCH} -d
-	touch $@
-endif
 
-$(stamp)install-linux: $(stamp)build-linux $(stamp)init-dirs
+$(stamp)install-linux.%: $(stamp)build-linux.% $(stamp)init-dirs
 	@echo START $@
-	dpkg-deb -x linux-libc-dev_${DEB_VER_LINUX}*_${CROSS_ARCH}.deb debian/tmp
-ifeq ($(DISTRO),Ubuntu)
-# linux-libc-dev got multiarched in 2.6.38-8.42 and we need to take care of it - LP: #750585
-	ln -sf $(CURDIR)/debian/tmp/usr/include/${CROSS_GNU_TYPE}/asm/ $(CURDIR)/debian/tmp/usr/include/asm
-endif
+	dpkg-deb -x linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}_all.deb debian/linux-libc-dev-${CROSS_ARCH}-cross
 	touch $@
+
+override_dh_install:
+	dh_install
 
 define init_binutils
 	$(call unpack_tarball, ${BINUTILS_DIR}/binutils-${VER_BINUTILS}.tar.xz)
@@ -487,22 +412,22 @@ repack-debs-indep: dpkg-cross
 	dpkg-deb -x linux-libc-dev_${DEB_VER_LINUX}_${CROSS_ARCH}.deb  repackfiles/linux
 	$(call repack_debs, ${DEB_LIST_ALL})
 
-build-arch:
-build-indep: build
-build: $(stamp)build-gcc2 $(stamp)build-glibc2
+#build-arch:
+#build-indep: build
+#build: $(stamp)build-gcc2 $(stamp)build-glibc2
 	# we do not need those packages
-	rm -f cpp-*_${HOST_ARCH}.*deb
-	rm -f gcc-*_${HOST_ARCH}.*deb
-	rm -f linux-headers*.*deb
-	rm -f *-doc*.*deb
-	rm -f *-source*.*deb
-	rm -f linux-tools-common_*.*deb
-	rm -f nscd*deb
-	rm -f libgcc1*deb
+#	rm -f cpp-*_${HOST_ARCH}.*deb
+#	rm -f gcc-*_${HOST_ARCH}.*deb
+#	rm -f linux-headers*.*deb
+#	rm -f *-doc*.*deb
+#	rm -f *-source*.*deb
+#	rm -f linux-tools-common_*.*deb
+#	rm -f nscd*deb
+#	rm -f libgcc1*deb
 
-binary: binary-arch binary-indep
-binary-arch:  build-arch
-binary-indep: build dpkg-cross mangle-debian-files-indep #$(stamp)make-dummies
+#binary: binary-arch binary-indep
+#binary-arch:  build-arch
+#binary-indep: build dpkg-cross mangle-debian-files-indep #$(stamp)make-dummies
 
 DUMMYNAME = 
 ifeq ($(CROSS_ARCH),armel)
@@ -571,6 +496,21 @@ dpkg-cross: build
 	    	-b $$deb; \
 	done
 
+#control:
+#	@echo START $@
+#	sed -e "s/CROSS_ARCH/${CROSS_ARCH}/g" \
+#	    -e "s/CROSS_GNU_TYPE/${CROSS_GNU_TYPE}/g" \
+#	    -e "s/CROSS_BIARCH/${CROSS_BIARCH}/g" \
+#	    -e "s/MIN_VER_GLIBC/${MIN_VER_GLIBC}/g" \
+#	    -e "s/MIN_VER_LINUX/${MIN_VER_LINUX}/g" \
+#	    -e "s/VER_LINUX/${VER_LINUX}/g" \
+#	    -e "s/MIN_VER_GCC/${MIN_VER_GCC}/g" \
+#	    -e "s/VER_GCC_BASE/${VER_GCC_BASE}/g" \
+#	    -e "s/EXTRA_DEPS/${EXTRA_DEPS}/g" \
+#	  debian/control.in \
+#	  $(if $(wildcard debian/control.$(CROSS_ARCH).in),debian/control.$(CROSS_ARCH).in) \
+#	    >debian/control
+
 control:
 	@echo START $@
 	sed -e "s/CROSS_ARCH/${CROSS_ARCH}/g" \
@@ -581,16 +521,6 @@ control:
 	    -e "s/VER_LINUX/${VER_LINUX}/g" \
 	    -e "s/MIN_VER_GCC/${MIN_VER_GCC}/g" \
 	    -e "s/VER_GCC_BASE/${VER_GCC_BASE}/g" \
-	    -e "s/EXTRA_DEPS/${EXTRA_DEPS}/g" \
-	  debian/control.in \
-	  $(if $(wildcard debian/control.$(CROSS_ARCH).in),debian/control.$(CROSS_ARCH).in) \
-	    >debian/control
-ifeq ($(PPA),true)
-	sed  \
-	    -e "s/binutils-source/binutils-${VER_BINUTILS}-source/g" \
-	    -e "s/glibc-source/glibc-${VER_GLIBC}-source/g" \
-	    -e "s/linux-source/linux-source-${VER_LINUX}/g" \
-	    -e "s/1.16.0~ubuntu6/1.15.5/g" \
-	    -e "s/gcc-${VER_GCC_BASE}-source/gcc-${VER_GCC_BASE}-${VER_GCC}-source/g" \
-	    -i $(CURDIR)/debian/control
-endif
+	  debian/control.source.in > debian/control
+	echo Build-Conflicts: $(foreach a,$(CROSS_ARCHES),binutils-$(call _gnu_type,$(a))$(,) libc6-$(a)-cross, linux-libc-dev-$(a)-cross) >> debian/control
+	$(foreach a,$(CROSS_ARCHES),sed -e "s/CROSS_ARCH/${a}/g" debian/control.linux-libc-dev.in >> debian/control;)

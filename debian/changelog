@@ -1,4 +1,4 @@
-powerpc-cross-toolchain-base (1.2) utopic; urgency=medium
+cross-toolchain-base (1.2) utopic; urgency=medium
 
   [ Matthias Klose ]
   * Build using the glibc source package.
