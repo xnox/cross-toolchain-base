@@ -67,10 +67,11 @@ info:
 %:
 	dh $@
 
+build: $(foreach arch,$(CROSS_ARCHES),$(addsuffix .$(arch),$(stamp)build-linux))
+
+build: $(foreach arch,$(CROSS_ARCHES),$(addsuffix .$(arch),$(stamp)build-binutils))
 
 override_dh_auto_install: $(foreach arch,$(CROSS_ARCHES),$(addsuffix .$(arch),$(stamp)install-linux))
-
-override_dh_auto_build: $(foreach arch,$(CROSS_ARCHES),$(addsuffix .$(arch),$(stamp)build-linux))
 
 $(stamp)init-dirs:
 	mkdir debian/tmp -p
@@ -100,6 +101,7 @@ $(stamp)build-linux.%: $(stamp)init-linux
 	make deb-pkg
 	rm -rf tmp
 	install -d tmp
+	dpkg-deb -R linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}_all.deb debian/tmp.${CROSS_ARCH}
 	dpkg-deb -R linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}_all.deb tmp
 	cd tmp/usr/include ;\
 	rm -rf drm scsi ;\
@@ -118,9 +120,6 @@ $(stamp)install-linux.%: $(stamp)build-linux.% $(stamp)init-dirs
 	dpkg-deb -x linux-libc-dev-${CROSS_ARCH}-cross_${DEB_VER_LINUX}_all.deb debian/linux-libc-dev-${CROSS_ARCH}-cross
 	touch $@
 
-override_dh_install:
-	dh_install
-
 define init_binutils
 	$(call unpack_tarball, ${BINUTILS_DIR}/binutils-${VER_BINUTILS}.tar.xz)
 	set -e; \
@@ -128,8 +127,7 @@ define init_binutils
 	cp -a ${BINUTILS_DIR}/debian/ . ;\
 	if [ -n "$$(grep -v '^\#' ${CURDIR}/debian/patches/binutils/series)" ]; then \
 	  QUILT_PATCHES=${CURDIR}/debian/patches/binutils quilt --quiltrc /dev/null  push -a; \
-	fi; \
-	echo ${CROSS_ARCH} > debian/target;
+	fi;
 endef
 
 $(stamp)init-binutils:
@@ -137,15 +135,15 @@ $(stamp)init-binutils:
 	$(call init_binutils)
 	touch $@
 
-$(stamp)build-binutils: $(stamp)init-binutils
+$(stamp)build-binutils.%: $(stamp)init-binutils
 	@echo START $@
 	set -e ;\
 	cd binutils-${PKG_VER_BINUTILS} ;\
-	WITH_SYSROOT=${CURDIR}/debian/tmp PATCHED_SOURCES=yes PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -nc -d
-	# binutils wants dejagnu to generate docs which are not generate during cross build
+	echo ${CROSS_ARCH} > debian/target ;\
+	WITH_SYSROOT=${CURDIR}/debian/tmp.${CROSS_ARCH} PATCHED_SOURCES=yes PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -d
 	touch $@
 
-$(stamp)install-binutils: $(stamp)build-binutils $(stamp)init-dirs
+$(stamp)install-binutils.%: $(stamp)build-binutils.% $(stamp)init-dirs
 	@echo START $@
 	dpkg-deb -x binutils-${CROSS_GNU_TYPE}_${DEB_VER_BINUTILS}_${HOST_ARCH}.deb debian/tmp
 	rm -f debian/tmp/usr/bin/*.exe
@@ -170,12 +168,12 @@ $(stamp)init-gcc:
 	cp -a  ${GCC_DIR}/debian/ . ; \
 	if [ -n "$$(grep -v '^\#' ${CURDIR}/debian/patches/gcc-${VER_GCC_BASE}/series)" ]; then \
 	  QUILT_PATCHES=${CURDIR}/debian/patches/gcc-${VER_GCC_BASE} quilt --quiltrc /dev/null  push -a ; \
-	fi; \
-	echo ${CROSS_ARCH} >debian/target
+	fi;
 	touch $@
 
 $(stamp)build-gcc1: $(stamp)init-gcc $(stamp)install-binutils
 	@echo START $@
+	echo ${CROSS_ARCH} >debian/target
 	export PATH=${CURDIR}/debian/tmp/$(PF)/bin/:${PATH} ;\
 	cd gcc && DH_VERBOSE=1 WITH_SYSROOT=/ WITH_BUILD_SYSROOT=${CURDIR}/debian/tmp DEB_STAGE=stage1 PKG_IGNORE_CURRENTLY_BUILDING=1 BACKPORT=false dpkg-buildpackage -b -uc -us -d
 	touch $@
