@@ -68,11 +68,10 @@ create_package() {
 
 # Some variables and settings used throughout the script
 version=$KERNELRELEASE
-revision=$(cat .version)
 if [ -n "$KDEB_PKGVERSION" ]; then
 	packageversion=$KDEB_PKGVERSION
 else
-	packageversion=$version-$revision
+	packageversion=$version-$(cat .version)
 fi
 tmpdir="$objtree/debian/tmp"
 fwdir="$objtree/debian/fwtmp"
